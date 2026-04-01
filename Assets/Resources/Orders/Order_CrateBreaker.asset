@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba480a45b58de8b4a8961bf7df6681fe, type: 3}
+  m_Name: Order_CrateBreaker
+  m_EditorClassIdentifier: Assembly-CSharp::GunOrder
+  buyerName: Viktor
+  gunName: Crate Breaker
+  price: 1950
+  riskLevel: 2
+  unlockDay: 3
+  selectionWeight: 2
+  grip: 1
+  trigger: 3
+  magazine: 5
+  body: 7
+  timeLimit: 88
+  riskBonusMultiplier: 1.2
+  heatOnAccept: 7
+  heatOnMistake: 17
+  heatOnLateDelivery: 12
+  heatOnCleanCompletion: 4
+  orderNotes: Bigger frame, shorter mag. Client wants it compact but mean.
