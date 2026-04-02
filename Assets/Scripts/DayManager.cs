@@ -67,7 +67,14 @@ public class DayManager : MonoBehaviour
         }
 
         instance = this;
-        currentDay = Mathf.Max(1, PlayerPrefs.GetInt(DayKey, 1));
+
+        if (DifficultyManager.HasLiveInstance)
+        {
+            DifficultyPreset preset = DifficultyManager.Instance.ActivePreset;
+            if (preset != null) jobsPerDay = preset.jobsPerDay;
+        }
+
+        currentDay = Mathf.Max(1, SaveSystem.LoadInt(DayKey, 1));
     }
 
     public void EnsureDayStarted()
@@ -287,7 +294,6 @@ public class DayManager : MonoBehaviour
 
     void SaveProgress()
     {
-        PlayerPrefs.SetInt(DayKey, Mathf.Max(1, currentDay));
-        PlayerPrefs.Save();
+        SaveSystem.SaveInt(DayKey, Mathf.Max(1, currentDay));
     }
 }

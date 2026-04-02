@@ -11,11 +11,16 @@ public static class RuntimeGameBootstrap
 
     public static void EnsureCoreSystems()
     {
+        // DifficultyManager MUST be first — other managers read from its preset on Awake
+        DifficultyManager.Instance.GetHashCode();
+
         CampaignManager.Instance.GetHashCode();
         HeatManager.Instance.GetHashCode();
         DayManager.Instance.GetHashCode();
         SummaryOverlayManager.Instance.GetHashCode();
         GameplayUIManager.Instance.GetHashCode();
+        TutorialManager.Instance.GetHashCode();
+        ForestEncounterManager.Instance.GetHashCode();
 
         ConfigureOverlayCanvases();
     }

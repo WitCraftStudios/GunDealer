@@ -7,9 +7,17 @@ public class ShopManager : MonoBehaviour
 {
     public static ShopManager Instance;
 
+    [Header("Supplier Catalog")]
     public ShopItem[] catalog; // Drag ShopItems here
     public bool includeResourceCatalog = false;
     public string resourceCatalogPath = "Shop";
+
+    [Header("World Shop")]
+    public Transform stockSpawnRoot;
+    [Min(1)] public int stockColumns = 3;
+    public float stockSpacingX = 1.2f;
+    public float stockSpacingZ = 1.15f;
+    public Vector3 stockStartOffset = new Vector3(0f, 0.05f, 0f);
 
     RectTransform runtimeRoot;
     RectTransform viewportRoot;
@@ -17,6 +25,9 @@ public class ShopManager : MonoBehaviour
     TextMeshProUGUI summaryText;
     ScrollRect shopScrollRect;
     readonly List<GameObject> runtimeRows = new List<GameObject>();
+    readonly Dictionary<ShopItem, List<ShopStockItem>> stockedItems = new Dictionary<ShopItem, List<ShopStockItem>>();
+    Transform runtimeStockRoot;
+    int nextStockSlotIndex;
 
     void Awake()
     {
@@ -33,46 +44,54 @@ public class ShopManager : MonoBehaviour
 
     public void PurchaseItem(ShopItem item)
     {
-        if (item == null || item.prefab == null)
+        if (!CanOrderItem(item, true))
         {
-            GameFeedback.Warn("That shop item is invalid.");
-            RefreshShopUI();
             return;
         }
 
-        if (CampaignManager.Instance.IsGameOver)
+        ShopStockItem stockItem = SpawnStockedItem(item);
+        if (stockItem == null)
         {
-            GameFeedback.Show("The suppliers have gone dark. Restart the campaign to buy again.");
-            RefreshShopUI();
-            return;
-        }
-
-        int currentDay = DayManager.HasLiveInstance ? DayManager.Instance.CurrentDay : 1;
-        if (item.unlockDay > currentDay)
-        {
-            GameFeedback.Show($"{item.itemName} is not available until day {item.unlockDay}.", 2f);
-            RefreshShopUI();
-            return;
-        }
-
-        if (RewardManager.Instance == null || DeliveryZone.Instance == null)
-        {
-            GameFeedback.Error("The shop is missing its delivery setup.");
-            RefreshShopUI();
-            return;
-        }
-
-        if (RewardManager.Instance.TrySpendCash(item.cost))
-        {
-            DeliveryZone.Instance.SpawnItem(item);
-            GameFeedback.Show($"Purchased {item.itemName} for ${item.cost}. Check the storage area.");
+            GameFeedback.Error("The shop could not place that order in the scene.");
         }
         else
         {
-            GameFeedback.Show($"Not enough cash for {item.itemName}.", 1.9f);
+            GameFeedback.Show($"Ordered {item.itemName} to the shop. Head over there to buy it.", 2.6f);
         }
 
         RefreshShopUI();
+    }
+
+    public bool TryPurchaseWorldStock(ShopStockItem stockItem)
+    {
+        if (stockItem == null || stockItem.Item == null)
+        {
+            GameFeedback.Warn("That shop item is missing its supplier data.");
+            return false;
+        }
+
+        ShopItem item = stockItem.Item;
+        if (!CanOrderItem(item, false)) return false;
+
+        if (RewardManager.Instance == null)
+        {
+            GameFeedback.Error("The cash system is missing.");
+            return false;
+        }
+
+        if (!RewardManager.Instance.TrySpendCash(item.cost))
+        {
+            GameFeedback.Show($"Not enough cash for {item.itemName}.", 1.9f);
+            RefreshShopUI();
+            return false;
+        }
+
+        UnregisterStock(stockItem);
+        stockItem.CompletePurchase();
+        stockItem.TryAutoCollect();
+        GameFeedback.Show($"Purchased {item.itemName} for ${item.cost}.", 2.2f);
+        RefreshShopUI();
+        return true;
     }
 
     public void RefreshShopUI()
@@ -103,16 +122,15 @@ public class ShopManager : MonoBehaviour
         });
 
         int currentDay = DayManager.HasLiveInstance ? DayManager.Instance.CurrentDay : 1;
-        int currentCash = RewardManager.Instance != null ? RewardManager.Instance.CurrentCash : 0;
         bool campaignClosed = CampaignManager.Instance.IsGameOver;
 
         summaryText.text = campaignClosed
-            ? "Suppliers are offline. Restart the campaign to place new orders."
-            : "Order parts and cases to the storage shelves.\nLocked items unlock on later days.";
+            ? "Suppliers are offline. Restart the campaign to place new shop orders."
+            : "Use this terminal to order stock to the physical shop.\nThen go to the shop and press E on an item to buy it.";
 
         for (int i = 0; i < items.Count; i++)
         {
-            CreateShopRow(items[i], currentDay, currentCash, campaignClosed);
+            CreateShopRow(items[i], currentDay, campaignClosed);
         }
     }
 
@@ -248,13 +266,13 @@ public class ShopManager : MonoBehaviour
         }
     }
 
-    void CreateShopRow(ShopItem item, int currentDay, int currentCash, bool campaignClosed)
+    void CreateShopRow(ShopItem item, int currentDay, bool campaignClosed)
     {
         if (item == null) return;
 
         bool unlocked = item.unlockDay <= currentDay;
-        bool affordable = currentCash >= item.cost;
-        bool available = unlocked && affordable && !campaignClosed;
+        bool orderable = unlocked && !campaignClosed;
+        int stockedCount = GetStockCount(item);
 
         string statusLine;
         if (campaignClosed)
@@ -263,19 +281,19 @@ public class ShopManager : MonoBehaviour
         }
         else if (!unlocked)
         {
-            statusLine = $"Available on day {item.unlockDay}.";
+            statusLine = $"Supplier unlocks on day {item.unlockDay}.";
         }
-        else if (!affordable)
+        else if (stockedCount > 0)
         {
-            statusLine = $"Need ${item.cost - currentCash} more cash.";
+            statusLine = $"{stockedCount} waiting in the shop. Buy there for ${item.cost}.";
         }
         else
         {
-            statusLine = "Ready for delivery to the warehouse.";
+            statusLine = $"Order to the shop, then buy there for ${item.cost}.";
         }
 
         string description = string.IsNullOrWhiteSpace(item.description) ? "No supplier notes." : item.description.Trim();
-        Color backgroundColor = available
+        Color backgroundColor = orderable
             ? new Color(0.16f, 0.31f, 0.23f, 0.95f)
             : unlocked
                 ? new Color(0.36f, 0.21f, 0.19f, 0.95f)
@@ -289,7 +307,7 @@ public class ShopManager : MonoBehaviour
             backgroundColor,
             Color.white);
 
-        button.interactable = available;
+        button.interactable = orderable;
 
         LayoutElement element = button.gameObject.AddComponent<LayoutElement>();
         element.preferredHeight = 126f;
@@ -332,7 +350,7 @@ public class ShopManager : MonoBehaviour
             new Vector2(-18f, -12f),
             new Vector2(150f, 28f),
             new Vector2(1f, 1f));
-        priceText.color = available ? new Color(0.86f, 1f, 0.88f, 1f) : new Color(0.96f, 0.84f, 0.84f, 1f);
+        priceText.color = orderable ? new Color(0.86f, 1f, 0.88f, 1f) : new Color(0.96f, 0.84f, 0.84f, 1f);
 
         TextMeshProUGUI descriptionText = RuntimeUiFactory.CreateText(
             "Description",
@@ -362,13 +380,159 @@ public class ShopManager : MonoBehaviour
             new Vector2(-36f, 24f),
             new Vector2(0f, 0f));
         statusText.margin = new Vector4(18f, 0f, 18f, 0f);
-        statusText.color = available
+        statusText.color = orderable
             ? new Color(0.82f, 1f, 0.86f, 1f)
             : unlocked
                 ? new Color(1f, 0.86f, 0.82f, 1f)
                 : new Color(0.84f, 0.88f, 0.93f, 1f);
 
         runtimeRows.Add(button.gameObject);
+    }
+
+    bool CanOrderItem(ShopItem item, bool refreshUiOnFailure)
+    {
+        if (item == null || item.prefab == null)
+        {
+            GameFeedback.Warn("That shop item is invalid.");
+            if (refreshUiOnFailure) RefreshShopUI();
+            return false;
+        }
+
+        if (CampaignManager.Instance.IsGameOver)
+        {
+            GameFeedback.Show("The suppliers have gone dark. Restart the campaign to trade again.");
+            if (refreshUiOnFailure) RefreshShopUI();
+            return false;
+        }
+
+        int currentDay = DayManager.HasLiveInstance ? DayManager.Instance.CurrentDay : 1;
+        if (item.unlockDay > currentDay)
+        {
+            GameFeedback.Show($"{item.itemName} is not available until day {item.unlockDay}.", 2f);
+            if (refreshUiOnFailure) RefreshShopUI();
+            return false;
+        }
+
+        return true;
+    }
+
+    ShopStockItem SpawnStockedItem(ShopItem item)
+    {
+        Transform stockRoot = EnsureRuntimeStockRoot();
+        if (stockRoot == null) return null;
+
+        int slotIndex = nextStockSlotIndex++;
+        Vector3 spawnPosition = GetStockPosition(slotIndex);
+        GameObject spawned = Instantiate(item.prefab, spawnPosition, stockRoot.rotation);
+        ShopStockItem stockItem = spawned.GetComponent<ShopStockItem>();
+        if (stockItem == null) stockItem = spawned.AddComponent<ShopStockItem>();
+        stockItem.Initialize(this, item);
+
+        RegisterStock(item, stockItem);
+        return stockItem;
+    }
+
+    void RegisterStock(ShopItem item, ShopStockItem stockItem)
+    {
+        if (item == null || stockItem == null) return;
+
+        if (!stockedItems.TryGetValue(item, out List<ShopStockItem> stockList))
+        {
+            stockList = new List<ShopStockItem>();
+            stockedItems[item] = stockList;
+        }
+
+        stockList.Add(stockItem);
+    }
+
+    void UnregisterStock(ShopStockItem stockItem)
+    {
+        if (stockItem == null || stockItem.Item == null) return;
+        if (!stockedItems.TryGetValue(stockItem.Item, out List<ShopStockItem> stockList)) return;
+
+        stockList.Remove(stockItem);
+    }
+
+    int GetStockCount(ShopItem item)
+    {
+        if (item == null) return 0;
+        if (!stockedItems.TryGetValue(item, out List<ShopStockItem> stockList)) return 0;
+
+        int count = 0;
+        for (int i = stockList.Count - 1; i >= 0; i--)
+        {
+            ShopStockItem stockItem = stockList[i];
+            if (stockItem == null)
+            {
+                stockList.RemoveAt(i);
+                continue;
+            }
+
+            if (!stockItem.IsPurchased) count++;
+        }
+
+        return count;
+    }
+
+    Transform EnsureRuntimeStockRoot()
+    {
+        Transform anchor = ResolveStockAnchor();
+        if (anchor == null) return null;
+
+        if (runtimeStockRoot != null && runtimeStockRoot.parent == anchor) return runtimeStockRoot;
+
+        Transform existing = anchor.Find("RuntimeShopStock");
+        if (existing != null)
+        {
+            runtimeStockRoot = existing;
+            return runtimeStockRoot;
+        }
+
+        GameObject root = new GameObject("RuntimeShopStock");
+        runtimeStockRoot = root.transform;
+        runtimeStockRoot.SetParent(anchor, false);
+        runtimeStockRoot.localPosition = Vector3.zero;
+        runtimeStockRoot.localRotation = Quaternion.identity;
+        return runtimeStockRoot;
+    }
+
+    Transform ResolveStockAnchor()
+    {
+        if (stockSpawnRoot != null) return stockSpawnRoot;
+
+        string[] candidateNames =
+        {
+            "ShopStockRoot",
+            "ShopCounter",
+            "ShopFloor",
+            "Shop"
+        };
+
+        for (int i = 0; i < candidateNames.Length; i++)
+        {
+            Transform candidate = GameObject.Find(candidateNames[i])?.transform;
+            if (candidate != null)
+            {
+                stockSpawnRoot = candidate;
+                return stockSpawnRoot;
+            }
+        }
+
+        stockSpawnRoot = transform;
+        return stockSpawnRoot;
+    }
+
+    Vector3 GetStockPosition(int slotIndex)
+    {
+        Transform stockRoot = runtimeStockRoot != null ? runtimeStockRoot : EnsureRuntimeStockRoot();
+        if (stockRoot == null) return transform.position;
+
+        int safeColumns = Mathf.Max(1, stockColumns);
+        int column = slotIndex % safeColumns;
+        int row = slotIndex / safeColumns;
+        float centeredColumn = column - ((safeColumns - 1) * 0.5f);
+        Vector3 localOffset = stockStartOffset + new Vector3(centeredColumn * stockSpacingX, 0f, -row * stockSpacingZ);
+        return stockRoot.TransformPoint(localOffset);
     }
 
     void ClearRuntimeRows()

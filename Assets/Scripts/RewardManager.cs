@@ -7,8 +7,9 @@ public class RewardManager : MonoBehaviour
     const string CashKey = "Campaign.Cash";
     const string CompletedOrdersKey = "Campaign.CompletedOrders";
 
-    public TMPro.TextMeshProUGUI cashUI; // UI text for cash
+    public TMPro.TextMeshProUGUI cashUI;
     public int startingCash = 350;
+    [Min(0)] public int minimumOrderPayout = 25;
     private int totalCash;
     private int completedOrders;
 
@@ -26,8 +27,20 @@ public class RewardManager : MonoBehaviour
 
         Instance = this;
         RuntimeGameBootstrap.EnsureCoreSystems();
-        totalCash = PlayerPrefs.GetInt(CashKey, startingCash);
-        completedOrders = PlayerPrefs.GetInt(CompletedOrdersKey, 0);
+
+        // Apply difficulty preset
+        if (DifficultyManager.HasLiveInstance)
+        {
+            DifficultyPreset preset = DifficultyManager.Instance.ActivePreset;
+            if (preset != null)
+            {
+                startingCash       = preset.startingCash;
+                minimumOrderPayout = preset.minimumOrderPayout;
+            }
+        }
+
+        totalCash       = SaveSystem.LoadInt(CashKey, startingCash);
+        completedOrders = SaveSystem.LoadInt(CompletedOrdersKey, 0);
         if (cashUI != null) cashUI.gameObject.SetActive(false);
         RefreshHUD();
     }
@@ -54,8 +67,18 @@ public class RewardManager : MonoBehaviour
             penalty += overtimePenalty * 0.5f;
         }
 
+        // Apply difficulty payout multiplier
+        float payoutMultiplier = 1f;
+        if (DifficultyManager.HasLiveInstance)
+        {
+            DifficultyPreset preset = DifficultyManager.Instance.ActivePreset;
+            if (preset != null) payoutMultiplier = preset.orderPayoutMultiplier;
+        }
+
         penalty = Mathf.Clamp01(penalty);
-        int reward = Mathf.Max(0, Mathf.RoundToInt(basePrice * order.riskBonusMultiplier * (1f - penalty)));
+        int reward = Mathf.Max(
+            minimumOrderPayout,
+            Mathf.RoundToInt(basePrice * order.riskBonusMultiplier * payoutMultiplier * (1f - penalty)));
         totalCash += reward;
         completedOrders++;
         SaveProgress();
@@ -74,12 +97,18 @@ public class RewardManager : MonoBehaviour
         else if (overtimeSeconds > 0f) rewardMessage += " Overtime reduced the reward.";
         GameFeedback.Show(rewardMessage, 3f);
 
-        OrderManager.Instance.CompleteOrder(); // New order
+        OrderManager.Instance.CompleteOrder();
         if (CraftingManager.Instance != null)
         {
-            CraftingManager.Instance.isAssembled = false; // Reset
+            CraftingManager.Instance.isAssembled = false;
             CraftingManager.Instance.correctAssembly = false;
         }
+
+        // Fire tutorial event
+        TutorialManager.FireGunDelivered();
+
+        // Check win condition
+        CampaignManager.Instance.CheckWinCondition(totalCash);
 
         RefreshHUD();
     }
@@ -185,8 +214,7 @@ public class RewardManager : MonoBehaviour
 
     void SaveProgress()
     {
-        PlayerPrefs.SetInt(CashKey, totalCash);
-        PlayerPrefs.SetInt(CompletedOrdersKey, completedOrders);
-        PlayerPrefs.Save();
+        SaveSystem.SaveInt(CashKey, totalCash);
+        SaveSystem.SaveInt(CompletedOrdersKey, completedOrders);
     }
 }

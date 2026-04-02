@@ -64,6 +64,9 @@ public class PartSlot : MonoBehaviour, IInteractable, IInteractionPromptProvider
 
             if (CraftingManager.Instance != null) CraftingManager.Instance.CheckAssembly();
             GameFeedback.Show($"Placed {OrderManager.GetPartTypeLabel(held.type)} on the bench.");
+
+            // Tutorial hook
+            TutorialManager.FirePartPlaced();
         }
         else
         {

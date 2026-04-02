@@ -114,7 +114,7 @@ public class OrderManager : MonoBehaviour
     // Called when "Accept" button is clicked
     public void AcceptOrder()
     {
-        if (CampaignManager.Instance.IsGameOver) return;
+        if (CampaignManager.Instance.IsGameOver || CampaignManager.Instance.IsWon) return;
         if (currentOrder == null || hasAcceptedOrder) return;
         GameFeedback.Show($"Accepted order: {currentOrder.gunName}.");
 
@@ -123,6 +123,10 @@ public class OrderManager : MonoBehaviour
         if (TimerManager.Instance != null) TimerManager.Instance.StartTimer(currentOrder.timeLimit);
         HeatManager.Instance.ApplyOrderAccepted(currentOrder);
         DayManager.Instance.NotifyOrderAccepted(currentOrder);
+
+        // Tutorial hook
+        TutorialManager.FireOrderAccepted();
+        ForestEncounterManager.Instance.NotifyOrderAccepted(currentOrder);
 
         RefreshOrderUI(true);
         if (RewardManager.Instance != null) RewardManager.Instance.RefreshHUD();
@@ -138,6 +142,7 @@ public class OrderManager : MonoBehaviour
 
         GameFeedback.Show($"Rejected {rejectedOrder.gunName}.", 1.8f);
         ResetCurrentOrderState();
+        if (ForestEncounterManager.HasLiveInstance) ForestEncounterManager.Instance.ClearActiveNpcs();
         if (PCManager.Instance != null) PCManager.Instance.ExitPC();
         if (shouldQueueNextOrder) QueueNextOrder();
     }
@@ -156,6 +161,7 @@ public class OrderManager : MonoBehaviour
         bool shouldQueueNextOrder = completedOrder != null ? DayManager.Instance.NotifyOrderCompleted(completedOrder) : true;
 
         ResetCurrentOrderState();
+        if (ForestEncounterManager.HasLiveInstance) ForestEncounterManager.Instance.ClearActiveNpcs();
         if (shouldQueueNextOrder) QueueNextOrder();
     }
 
@@ -188,12 +194,7 @@ public class OrderManager : MonoBehaviour
             {
                 string status = hasAcceptedOrder ? "Status: Accepted" : "Status: Pending";
                 string notes = string.IsNullOrWhiteSpace(currentOrder.orderNotes) ? string.Empty : $"\nNotes: {currentOrder.orderNotes}";
-                string requiredParts =
-                    $"\nRequired Parts:\n" +
-                    $"- {GetPartTypeLabel(currentOrder.grip)}\n" +
-                    $"- {GetPartTypeLabel(currentOrder.trigger)}\n" +
-                    $"- {GetPartTypeLabel(currentOrder.magazine)}\n" +
-                    $"- {GetPartTypeLabel(currentOrder.body)}";
+                string requiredParts = BuildRequiredPartsText(currentOrder);
                 targetOrderText.text =
                     $"Buyer: {currentOrder.buyerName}\n" +
                     $"Gun: {currentOrder.gunName}\n" +
@@ -384,6 +385,7 @@ public class OrderManager : MonoBehaviour
 
         lastOfferedOrder = null;
         ResetCurrentOrderState();
+        if (ForestEncounterManager.HasLiveInstance) ForestEncounterManager.Instance.ClearActiveNpcs();
     }
 
     public string GetObjectiveHudLine()
@@ -409,12 +411,28 @@ public class OrderManager : MonoBehaviour
     public string GetRecipeHudLine()
     {
         if (currentOrder == null || !hasAcceptedOrder) return string.Empty;
+        return $"Recipe: {BuildRecipeString(currentOrder, " | ")}";
+    }
 
-        return
-            $"Recipe: {GetPartTypeLabel(currentOrder.grip)} | " +
-            $"{GetPartTypeLabel(currentOrder.trigger)} | " +
-            $"{GetPartTypeLabel(currentOrder.magazine)} | " +
-            $"{GetPartTypeLabel(currentOrder.body)}";
+    string BuildRecipeString(GunOrder order, string separator)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        if (order.requiresGrip)    { if (sb.Length > 0) sb.Append(separator); sb.Append(GetPartTypeLabel(order.grip)); }
+        if (order.requiresTrigger) { if (sb.Length > 0) sb.Append(separator); sb.Append(GetPartTypeLabel(order.trigger)); }
+        if (order.requiresMag)     { if (sb.Length > 0) sb.Append(separator); sb.Append(GetPartTypeLabel(order.magazine)); }
+        if (order.requiresBody)    { if (sb.Length > 0) sb.Append(separator); sb.Append(GetPartTypeLabel(order.body)); }
+        return sb.Length > 0 ? sb.ToString() : "(no parts required)";
+    }
+
+    string BuildRequiredPartsText(GunOrder order)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.Append("\nRequired Parts:");
+        if (order.requiresGrip)    sb.Append($"\n- {GetPartTypeLabel(order.grip)}");
+        if (order.requiresTrigger) sb.Append($"\n- {GetPartTypeLabel(order.trigger)}");
+        if (order.requiresMag)     sb.Append($"\n- {GetPartTypeLabel(order.magazine)}");
+        if (order.requiresBody)    sb.Append($"\n- {GetPartTypeLabel(order.body)}");
+        return sb.ToString();
     }
 
     List<GunOrder> GetCombinedOrderPool()

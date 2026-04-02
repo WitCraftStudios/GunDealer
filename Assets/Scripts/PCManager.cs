@@ -18,7 +18,11 @@ public class PCManager : MonoBehaviour
 
     private Vector3 originalCamPos;
     private Quaternion originalCamRot;
+    private Vector3 originalCamLocalPos;
+    private Quaternion originalCamLocalRot;
+    private Transform originalCamParent;
     private bool isInPC = false;
+    private bool hasStoredCameraState;
     private Coroutine cameraTransition;
     private GameObject runtimeNavRoot;
     private Button orderTabButton;
@@ -39,6 +43,7 @@ public class PCManager : MonoBehaviour
 
         RuntimeGameBootstrap.EnsureCoreSystems();
         Instance = this;
+        if (playerController == null) playerController = FindFirstObjectByType<PlayerController>();
         CloseAllTabs();
         if (pcCanvas != null) pcCanvas.SetActive(false);
     }
@@ -47,7 +52,11 @@ public class PCManager : MonoBehaviour
     {
         if (!isInPC) return;
 
-        if (Input.GetKeyDown(KeyCode.Tab))
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            ExitPC();
+        }
+        else if (Input.GetKeyDown(KeyCode.Tab))
         {
             OpenTab(shopTab != null && shopTab.activeSelf ? 0 : 1);
         }
@@ -64,6 +73,7 @@ public class PCManager : MonoBehaviour
     public void EnterPC()
     {
         if (isInPC) return;
+        if (playerController == null) playerController = FindFirstObjectByType<PlayerController>();
         if (pcCanvas == null)
         {
             Debug.LogError("PCManager is missing its PC canvas.");
@@ -71,7 +81,7 @@ public class PCManager : MonoBehaviour
         }
 
         isInPC = true;
-        
+
         pcCanvas.SetActive(true);
         EnsureRuntimeNavigation();
         OpenTab(0); // Default to Order tab
@@ -79,16 +89,18 @@ public class PCManager : MonoBehaviour
         GameplayUIManager.Instance.SetWorldInteractionVisible(false);
         GameplayUIManager.Instance.SetInteractionPrompt(string.Empty);
         GameplayUIManager.Instance.SetContextHint("1 Orders   2 Shop   Tab Switch   Esc Close");
+        if (playerController != null) playerController.canControl = false;
 
         if (cameraTransition != null) StopCoroutine(cameraTransition);
         cameraTransition = StartCoroutine(TransitionCameraToComputer());
+
+        // Tutorial
+        if (TutorialManager.HasLiveInstance) TutorialManager.Instance.NotifyPCOpened();
     }
 
     public void ExitPC()
     {
         if (pcCanvas != null) pcCanvas.SetActive(false);
-        if (cameraTransition != null) StopCoroutine(cameraTransition);
-        cameraTransition = StartCoroutine(TransitionCameraBack());
         isInPC = false;
         GameplayUIManager.Instance.SetHudVisible(true);
         GameplayUIManager.Instance.SetWorldInteractionVisible(true);
@@ -96,6 +108,9 @@ public class PCManager : MonoBehaviour
             ? playerController.GetGameplayContextHint()
             : "E Use   G Drop   Space Jump   Shift Run";
         GameplayUIManager.Instance.SetContextHint(gameplayHint);
+
+        if (cameraTransition != null) StopCoroutine(cameraTransition);
+        cameraTransition = StartCoroutine(TransitionCameraBack());
     }
     
     // 0 = Orders, 1 = Shop
@@ -183,67 +198,142 @@ public class PCManager : MonoBehaviour
 
     IEnumerator TransitionCameraToComputer()
     {
-        if (computerViewTarget == null) { Debug.LogError("PC Camera Target missing!"); yield break; }
-
-        Camera mainCam = Camera.main;
+        Camera mainCam = ResolveViewCamera();
         if (mainCam == null)
         {
             Debug.LogError("PCManager could not find the main camera.");
+            UnlockCursorForPc();
             cameraTransition = null;
             yield break;
         }
 
-        if (playerController != null && playerController.canControl)
+        StoreCameraState(mainCam);
+
+        if (computerViewTarget == null)
         {
-            originalCamPos = mainCam.transform.position;
-            originalCamRot = mainCam.transform.rotation;
-            playerController.canControl = false;
+            Debug.LogError("PC Camera Target missing!");
+            UnlockCursorForPc();
+            cameraTransition = null;
+            yield break;
+        }
+
+        if (mainCam.transform.parent != null)
+        {
+            mainCam.transform.SetParent(null, true);
         }
 
         Vector3 startPos = mainCam.transform.position;
         Quaternion startRot = mainCam.transform.rotation;
-        float t = 0;
-        float locationT = 0;
+        float t = 0f;
         
-        while (t < 1)
+        while (t < 1f)
         {
-            t += Time.deltaTime; // 1s duration
-            locationT = t; // Linear for now
-            mainCam.transform.position = Vector3.Lerp(startPos, computerViewTarget.position, locationT);
-            mainCam.transform.rotation = Quaternion.Lerp(startRot, computerViewTarget.rotation, locationT);
+            t += Time.deltaTime;
+            float easedT = Mathf.Clamp01(t);
+            mainCam.transform.position = Vector3.Lerp(startPos, computerViewTarget.position, easedT);
+            mainCam.transform.rotation = Quaternion.Slerp(startRot, computerViewTarget.rotation, easedT);
             yield return null;
         }
 
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        UnlockCursorForPc();
         cameraTransition = null;
     }
 
     IEnumerator TransitionCameraBack()
     {
-        Camera mainCam = Camera.main;
+        Camera mainCam = ResolveViewCamera();
         if (mainCam == null)
         {
             Debug.LogError("PCManager could not find the main camera.");
+            RestoreGameplayControl();
             cameraTransition = null;
             yield break;
         }
 
+        if (!hasStoredCameraState)
+        {
+            RestoreGameplayControl();
+            cameraTransition = null;
+            yield break;
+        }
+
+        if (mainCam.transform.parent != null)
+        {
+            mainCam.transform.SetParent(null, true);
+        }
+
         Vector3 startPos = mainCam.transform.position;
         Quaternion startRot = mainCam.transform.rotation;
-        float t = 0;
+        float t = 0f;
 
-        while (t < 1)
+        while (t < 1f)
         {
             t += Time.deltaTime;
-            mainCam.transform.position = Vector3.Lerp(startPos, originalCamPos, t);
-            mainCam.transform.rotation = Quaternion.Lerp(startRot, originalCamRot, t);
+            float easedT = Mathf.Clamp01(t);
+            mainCam.transform.position = Vector3.Lerp(startPos, originalCamPos, easedT);
+            mainCam.transform.rotation = Quaternion.Slerp(startRot, originalCamRot, easedT);
             yield return null;
         }
 
+        RestoreCameraHierarchy(mainCam);
+        RestoreGameplayControl();
+        cameraTransition = null;
+    }
+
+    Camera ResolveViewCamera()
+    {
+        if (playerController != null && playerController.ViewCamera != null)
+            return playerController.ViewCamera;
+
+        return Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+    }
+
+    void StoreCameraState(Camera mainCam)
+    {
+        if (mainCam == null) return;
+
+        originalCamParent = mainCam.transform.parent;
+        originalCamLocalPos = mainCam.transform.localPosition;
+        originalCamLocalRot = mainCam.transform.localRotation;
+        originalCamPos = mainCam.transform.position;
+        originalCamRot = mainCam.transform.rotation;
+        hasStoredCameraState = true;
+    }
+
+    void RestoreCameraHierarchy(Camera mainCam)
+    {
+        if (mainCam == null || !hasStoredCameraState) return;
+
+        if (originalCamParent != null)
+        {
+            mainCam.transform.SetParent(originalCamParent, true);
+            mainCam.transform.localPosition = originalCamLocalPos;
+            mainCam.transform.localRotation = originalCamLocalRot;
+        }
+        else
+        {
+            mainCam.transform.SetParent(null, true);
+            mainCam.transform.position = originalCamPos;
+            mainCam.transform.rotation = originalCamRot;
+        }
+
+        hasStoredCameraState = false;
+    }
+
+    void UnlockCursorForPc()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    void RestoreGameplayControl()
+    {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        if (playerController != null) playerController.canControl = true;
-        cameraTransition = null;
+        if (playerController != null)
+        {
+            playerController.canControl = true;
+            playerController.SyncLookRotationToCurrentCamera();
+        }
     }
 }

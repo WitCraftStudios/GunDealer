@@ -59,6 +59,18 @@ public class PlayerInventory : MonoBehaviour
         item.transform.localPosition = Vector3.zero;
         item.transform.localRotation = Quaternion.identity;
         heldItem = item;
+
+        // Fire tutorial event if this is a gun part
+        Part part = item.GetComponent<Part>();
+        if (part != null)
+        {
+            TutorialManager.FirePartPickedUp();
+            if (part.type == PartType.Assembled)
+            {
+                GameFeedback.Show("Assembled gun ready. Left click to fire live rounds.", 2f);
+            }
+        }
+
         return true;
     }
 

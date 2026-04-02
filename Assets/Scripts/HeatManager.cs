@@ -57,7 +57,20 @@ public class HeatManager : MonoBehaviour
         }
 
         instance = this;
-        currentHeat = PlayerPrefs.GetInt(HeatKey, currentHeat);
+
+        // Apply difficulty preset values if available
+        if (DifficultyManager.HasLiveInstance)
+        {
+            DifficultyPreset preset = DifficultyManager.Instance.ActivePreset;
+            if (preset != null)
+            {
+                warningThreshold   = preset.heatWarningThreshold;
+                raidThreshold      = preset.heatRaidThreshold;
+                inspectionBribeCost = preset.inspectionBribeCost;
+            }
+        }
+
+        currentHeat = SaveSystem.LoadInt(HeatKey, currentHeat);
         inspectionQueued = currentHeat >= warningThreshold && currentHeat < raidThreshold;
         raidQueued = currentHeat >= raidThreshold;
     }
@@ -262,7 +275,6 @@ public class HeatManager : MonoBehaviour
 
     void SaveHeat()
     {
-        PlayerPrefs.SetInt(HeatKey, currentHeat);
-        PlayerPrefs.Save();
+        SaveSystem.SaveInt(HeatKey, currentHeat);
     }
 }
