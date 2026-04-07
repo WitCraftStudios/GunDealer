@@ -43,6 +43,7 @@ public class CampaignManager : MonoBehaviour
 
     public bool IsGameOver => isGameOver;
     public bool IsWon => isWon;
+    public bool IsClosed => isGameOver || isWon;
     public int ShutdownCount => shutdownCount;
     public int RemainingShutdowns => Mathf.Max(0, Mathf.Max(1, maxShutdowns) - shutdownCount);
 
@@ -104,7 +105,7 @@ public class CampaignManager : MonoBehaviour
 
     public bool RegisterRaidShutdown()
     {
-        if (isGameOver || isWon) return true;
+        if (IsClosed) return true;
 
         shutdownCount = Mathf.Clamp(shutdownCount + 1, 0, maxShutdowns);
         isGameOver = shutdownCount >= maxShutdowns;
@@ -125,7 +126,7 @@ public class CampaignManager : MonoBehaviour
     /// <summary>Called by RewardManager after each successful delivery.</summary>
     public void CheckWinCondition(int currentCash)
     {
-        if (isWon || isGameOver) return;
+        if (IsClosed) return;
         if (cashWinGoal <= 0) return;
         if (currentCash < cashWinGoal) return;
 

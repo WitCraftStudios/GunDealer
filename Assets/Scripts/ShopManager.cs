@@ -122,11 +122,18 @@ public class ShopManager : MonoBehaviour
         });
 
         int currentDay = DayManager.HasLiveInstance ? DayManager.Instance.CurrentDay : 1;
-        bool campaignClosed = CampaignManager.Instance.IsGameOver;
+        bool campaignClosed = CampaignManager.Instance.IsClosed;
 
-        summaryText.text = campaignClosed
-            ? "Suppliers are offline. Restart the campaign to place new shop orders."
-            : "Use this terminal to order stock to the physical shop.\nThen go to the shop and press E on an item to buy it.";
+        if (campaignClosed)
+        {
+            summaryText.text = CampaignManager.Instance.IsWon
+                ? "The operation is complete. Restart the campaign to place new supplier orders."
+                : "Suppliers are offline. Restart the campaign to place new shop orders.";
+        }
+        else
+        {
+            summaryText.text = "Use this terminal to order stock to the physical shop.\nThen go to the shop and press E on an item to buy it.";
+        }
 
         for (int i = 0; i < items.Count; i++)
         {
@@ -277,7 +284,9 @@ public class ShopManager : MonoBehaviour
         string statusLine;
         if (campaignClosed)
         {
-            statusLine = "Suppliers offline until the campaign restarts.";
+            statusLine = CampaignManager.Instance.IsWon
+                ? "Campaign complete. Restart to place new supplier orders."
+                : "Suppliers offline until the campaign restarts.";
         }
         else if (!unlocked)
         {
@@ -398,9 +407,12 @@ public class ShopManager : MonoBehaviour
             return false;
         }
 
-        if (CampaignManager.Instance.IsGameOver)
+        if (CampaignManager.Instance.IsClosed)
         {
-            GameFeedback.Show("The suppliers have gone dark. Restart the campaign to trade again.");
+            GameFeedback.Show(
+                CampaignManager.Instance.IsWon
+                    ? "The campaign is complete. Restart the run to trade again."
+                    : "The suppliers have gone dark. Restart the campaign to trade again.");
             if (refreshUiOnFailure) RefreshShopUI();
             return false;
         }

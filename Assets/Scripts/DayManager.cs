@@ -55,7 +55,7 @@ public class DayManager : MonoBehaviour
         isDayActive &&
         !isTransitioning &&
         ResolvedJobsToday < jobsPerDay &&
-        (!CampaignManager.HasLiveInstance || !CampaignManager.Instance.IsGameOver);
+        (!CampaignManager.HasLiveInstance || !CampaignManager.Instance.IsClosed);
 
     void Awake()
     {
@@ -79,7 +79,7 @@ public class DayManager : MonoBehaviour
 
     public void EnsureDayStarted()
     {
-        if (CampaignManager.Instance.IsGameOver) return;
+        if (CampaignManager.Instance.IsClosed) return;
         if (isDayActive || isTransitioning) return;
         StartNewDay();
     }
@@ -130,6 +130,11 @@ public class DayManager : MonoBehaviour
             return "The warehouse is burned. Press R to restart the run.";
         }
 
+        if (CampaignManager.HasLiveInstance && CampaignManager.Instance.IsWon)
+        {
+            return "The operation is complete. Press R to start a new run.";
+        }
+
         if (!string.IsNullOrWhiteSpace(statusMessage) && Time.time <= statusMessageExpiry)
         {
             return statusMessage;
@@ -168,9 +173,12 @@ public class DayManager : MonoBehaviour
 
     void StartNewDay()
     {
-        if (CampaignManager.Instance.IsGameOver)
+        if (CampaignManager.Instance.IsClosed)
         {
-            ShutdownCampaign("Campaign is shut down until you restart.");
+            ShutdownCampaign(
+                CampaignManager.Instance.IsWon
+                    ? "Campaign complete. Press R to start a new run."
+                    : "Campaign is shut down until you restart.");
             return;
         }
 
@@ -228,7 +236,7 @@ public class DayManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         nextDayRoutine = null;
-        if (CampaignManager.Instance.IsGameOver) yield break;
+        if (CampaignManager.Instance.IsClosed) yield break;
         currentDay++;
         StartNewDay();
     }

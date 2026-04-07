@@ -78,7 +78,10 @@ public class ForestEncounterManager : MonoBehaviour
             environmentRoot = root.transform;
         }
 
+        BuildGround(center);
         BuildPerimeterWalls(center);
+        BuildForestTrees(center);
+        BuildTestingRange(center);
         BuildNpcSpawnPoints(center);
     }
 

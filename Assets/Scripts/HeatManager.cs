@@ -184,6 +184,11 @@ public class HeatManager : MonoBehaviour
             return "Campaign lost. Press R to start over.";
         }
 
+        if (CampaignManager.HasLiveInstance && CampaignManager.Instance.IsWon)
+        {
+            return "Campaign complete. Press R to start a new run.";
+        }
+
         if (!string.IsNullOrWhiteSpace(alertMessage) && Time.time <= alertMessageExpiry)
         {
             return alertMessage;

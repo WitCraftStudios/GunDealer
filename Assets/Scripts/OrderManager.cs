@@ -76,7 +76,7 @@ public class OrderManager : MonoBehaviour
             GameFeedback.Error("No orders are configured for the order board.");
             return;
         }
-        if (CampaignManager.Instance.IsGameOver)
+        if (CampaignManager.Instance.IsClosed)
         {
             RefreshOrderUI(false);
             return;
@@ -151,7 +151,7 @@ public class OrderManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         pendingOrderRoutine = null;
-        if (CampaignManager.Instance.IsGameOver) yield break;
+        if (CampaignManager.Instance.IsClosed) yield break;
         GenerateNewOrder();
     }
 
@@ -181,6 +181,10 @@ public class OrderManager : MonoBehaviour
                 {
                     targetOrderText.text = "Warehouse compromised.\n\nPress R to restart the campaign.";
                 }
+                else if (CampaignManager.Instance.IsWon)
+                {
+                    targetOrderText.text = "Operation complete.\n\nPress R to start a new run.";
+                }
                 else if (DayManager.HasLiveInstance && DayManager.Instance.IsTransitioning)
                 {
                     targetOrderText.text = "Shift is closed.\n\nWait for the next day to begin.";
@@ -206,7 +210,7 @@ public class OrderManager : MonoBehaviour
             }
         }
 
-        bool canRespond = hasOrder && !hasAcceptedOrder && !CampaignManager.Instance.IsGameOver;
+        bool canRespond = hasOrder && !hasAcceptedOrder && !CampaignManager.Instance.IsClosed;
         if (acceptButton != null) acceptButton.interactable = canRespond;
         if (rejectButton != null) rejectButton.interactable = canRespond;
         if (runtimeAcceptButton != null) runtimeAcceptButton.interactable = canRespond;
@@ -255,7 +259,7 @@ public class OrderManager : MonoBehaviour
 
     void QueueNextOrder(float delay)
     {
-        if (CampaignManager.Instance.IsGameOver) return;
+        if (CampaignManager.Instance.IsClosed) return;
         if (DayManager.HasLiveInstance && !DayManager.Instance.CanGenerateOrders) return;
 
         if (pendingOrderRoutine != null)
@@ -340,6 +344,12 @@ public class OrderManager : MonoBehaviour
             return;
         }
 
+        if (CampaignManager.Instance.IsWon)
+        {
+            blueprintDisplayText.text = "OP COMPLETE\nPress R";
+            return;
+        }
+
         if (currentOrder == null)
         {
             blueprintDisplayText.text = "ORDER BOX\nNo active job\nUse PC";
@@ -347,15 +357,13 @@ public class OrderManager : MonoBehaviour
         }
 
         string statusLabel = hasAcceptedOrder ? "CURRENT JOB" : "INCOMING";
+        string recipeLines = BuildCompactRecipeString(currentOrder);
         blueprintDisplayText.text =
             $"{statusLabel}\n" +
             $"{currentOrder.gunName}\n" +
             $"{currentOrder.buyerName}\n" +
             $"${currentOrder.price}  {Mathf.RoundToInt(currentOrder.timeLimit)}s\n" +
-            $"{GetCompactPartTypeLabel(currentOrder.grip)}\n" +
-            $"{GetCompactPartTypeLabel(currentOrder.trigger)}\n" +
-            $"{GetCompactPartTypeLabel(currentOrder.magazine)}\n" +
-            $"{GetCompactPartTypeLabel(currentOrder.body)}";
+            $"{recipeLines}";
     }
 
     void UpdateBlueprintDisplayLayout()
@@ -393,6 +401,11 @@ public class OrderManager : MonoBehaviour
         if (CampaignManager.Instance.IsGameOver)
         {
             return "Objective: Restart the campaign";
+        }
+
+        if (CampaignManager.Instance.IsWon)
+        {
+            return "Objective: Start a fresh campaign";
         }
 
         if (currentOrder == null)
@@ -433,6 +446,24 @@ public class OrderManager : MonoBehaviour
         if (order.requiresMag)     sb.Append($"\n- {GetPartTypeLabel(order.magazine)}");
         if (order.requiresBody)    sb.Append($"\n- {GetPartTypeLabel(order.body)}");
         return sb.ToString();
+    }
+
+    string BuildCompactRecipeString(GunOrder order)
+    {
+        if (order == null) return "(no recipe)";
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        if (order.requiresGrip)    AppendCompactRecipeLine(sb, order.grip);
+        if (order.requiresTrigger) AppendCompactRecipeLine(sb, order.trigger);
+        if (order.requiresMag)     AppendCompactRecipeLine(sb, order.magazine);
+        if (order.requiresBody)    AppendCompactRecipeLine(sb, order.body);
+        return sb.Length > 0 ? sb.ToString() : "(no parts required)";
+    }
+
+    void AppendCompactRecipeLine(System.Text.StringBuilder sb, PartType type)
+    {
+        if (sb.Length > 0) sb.Append('\n');
+        sb.Append(GetCompactPartTypeLabel(type));
     }
 
     List<GunOrder> GetCombinedOrderPool()

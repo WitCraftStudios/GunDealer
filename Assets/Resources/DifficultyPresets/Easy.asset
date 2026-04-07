@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 539ca0ad9484aacceaa8a0d1d7ac6b8d, type: 3}
+  m_Name: Easy
+  m_EditorClassIdentifier: Assembly-CSharp::DifficultyPreset
+  startingCash: 500
+  minimumOrderPayout: 40
+  orderPayoutMultiplier: 1.15
+  cashWinGoal: 4000
+  heatWarningThreshold: 70
+  heatRaidThreshold: 96
+  inspectionBribeCost: 180
+  maxShutdowns: 4
+  jobsPerDay: 3

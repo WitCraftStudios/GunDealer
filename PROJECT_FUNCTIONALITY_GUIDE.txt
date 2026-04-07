@@ -1,0 +1,460 @@
+GUN DEALER PROJECT FUNCTIONALITY GUIDE
+======================================
+
+This file is the clean handoff guide for the current project state.
+It explains:
+1. What the project does
+2. How to use each gameplay system
+3. What each script is responsible for
+4. Where the key data lives
+
+
+1. PROJECT SUMMARY
+------------------
+This is a first-person gun black market / workshop simulator built in Unity.
+
+The player loop is:
+- Walk around the workshop in first person
+- Use the computer to inspect buyer orders
+- Accept or reject jobs
+- Pick up weapon parts
+- Place parts on the assembly bench
+- Assemble the gun
+- Load the finished gun into a gun case
+- Ship the case on the conveyor
+- Earn cash
+- Manage daily jobs, heat, inspections, raids, campaign loss, and campaign victory
+
+The project also includes:
+- A runtime HUD and interaction prompt system
+- A runtime PC interface with Orders and Shop tabs
+- A physical shop stock system
+- A tutorial system
+- Difficulty presets
+- A file-based save system
+- Forest encounter/combat content
+- A small target range
+
+
+2. PLAYER CONTROLS
+------------------
+Default keyboard/mouse controls:
+- Mouse: Look
+- WASD: Move
+- Space: Jump
+- Left Shift: Sprint
+- E: Interact
+- G: Drop held item
+- Esc: Cancel / close the PC
+- Left Click: Fire an assembled gun when holding one
+- 1: Open Orders tab while inside the PC
+- 2: Open Shop tab while inside the PC
+- Tab: Switch tabs while inside the PC
+- R: Restart after campaign loss or campaign win
+
+The project can also use Unity Input System actions where available, but it falls back to legacy input if needed.
+
+
+3. CORE GAMEPLAY SYSTEMS AND HOW TO USE THEM
+--------------------------------------------
+
+3.1 Orders
+- Walk to the computer and press E.
+- Open the Orders tab.
+- Review the buyer, gun name, price, risk, timer, and required parts.
+- Accept to start the order or reject it to move on.
+- Accepting an order:
+  - starts the timer
+  - raises heat based on order data
+  - updates the day/job counters
+  - spawns forest scouts based on order risk
+  - updates the world blueprint display
+
+Important scripts:
+- Assets/Scripts/OrderManager.cs
+- Assets/Scripts/GunOrder.cs
+- Assets/Scripts/ComputerInteract.cs
+- Assets/Scripts/PCManager.cs
+
+
+3.2 Crafting Bench
+- Pick up parts from shelves or purchased stock.
+- Walk to the correct bench slot and press E to place a part.
+- When all required slots are filled, use the red assemble button.
+- If the wrong parts are used, the gun still assembles but reward is reduced.
+- Orders can require all 4 parts or only a subset, depending on the GunOrder asset.
+
+Important scripts:
+- Assets/Scripts/CraftingManager.cs
+- Assets/Scripts/PartSlot.cs
+- Assets/Scripts/Part.cs
+- Assets/Scripts/AssembleButtonInteract.cs
+- Assets/Scripts/GunOrder.cs
+
+
+3.3 Gun Assembly Result
+- A successful assembly spawns the final gun prefab.
+- The player tries to auto-pick it up.
+- The assembled gun is marked as PartType.Assembled.
+- If the assembly was wrong, the gun gets spread when firing and the payout penalty applies later.
+
+Important scripts:
+- Assets/Scripts/CraftingManager.cs
+- Assets/Scripts/GunWeapon.cs
+
+
+3.4 Gun Case and Shipping
+- Pick up an empty gun case.
+- While holding the assembled gun, interact with the case to load the gun into it.
+- Carry the loaded case to the conveyor and press E.
+- The conveyor moves the case and triggers payout at the end.
+
+Important scripts:
+- Assets/Scripts/GunCase.cs
+- Assets/Scripts/ConveyorInteract.cs
+- Assets/Scripts/ConveyorManager.cs
+- Assets/Scripts/RewardManager.cs
+
+
+3.5 Shop Flow
+Current shop behavior:
+- Open the computer and switch to the Shop tab.
+- Use the supplier terminal to order stock into the physical shop area.
+- Go to the world shop stock.
+- Press E on a stocked item to buy it with cash.
+- Purchased items unlock their real interactions and can be picked up normally.
+
+Notes:
+- Shop items can unlock on later days.
+- The shop is disabled when the campaign is lost or won.
+
+Important scripts:
+- Assets/Scripts/ShopManager.cs
+- Assets/Scripts/ShopItem.cs
+- Assets/Scripts/ShopStockItem.cs
+- Assets/Scripts/PCManager.cs
+
+
+3.6 Cash, Rewards, and Penalties
+- Shipping a correct gun pays the full adjusted reward.
+- Wrong parts reduce payout.
+- Overtime reduces payout.
+- Difficulty can raise or lower payout.
+- A minimum order payout is enforced.
+
+Important scripts:
+- Assets/Scripts/RewardManager.cs
+- Assets/Scripts/TimerManager.cs
+- Assets/Scripts/CraftingManager.cs
+- Assets/Scripts/GunOrder.cs
+- Assets/Scripts/DifficultyManager.cs
+- Assets/Scripts/DifficultyPreset.cs
+
+
+3.7 Heat, Inspection, and Raid System
+- Accepting risky work raises heat.
+- Wrong builds and late deliveries raise heat further.
+- Clean deliveries can reduce heat.
+- At warning heat, an inspection is queued.
+- At raid heat, a raid is queued.
+- Inspection outcome depends on whether the player can afford the bribe.
+- A raid takes cash, resets heat to a lower value, and can shut down the day or campaign.
+
+Important scripts:
+- Assets/Scripts/HeatManager.cs
+- Assets/Scripts/RewardManager.cs
+- Assets/Scripts/CampaignManager.cs
+- Assets/Scripts/DayManager.cs
+
+
+3.8 Day Loop
+- The game runs in days.
+- Each day has a jobs-per-day limit.
+- Completing or rejecting jobs advances day resolution.
+- When the day ends, heat can cool down overnight.
+- A new day starts after the transition delay unless the campaign is closed.
+
+Important scripts:
+- Assets/Scripts/DayManager.cs
+- Assets/Scripts/OrderManager.cs
+- Assets/Scripts/HeatManager.cs
+
+
+3.9 Campaign Loss and Campaign Win
+- The campaign is lost after too many raid shutdowns.
+- The campaign is won when the cash goal is reached.
+- When the campaign is closed:
+  - no new orders should generate
+  - the shop stops trading
+  - the day loop stops advancing
+  - the player can restart with R
+
+Important scripts:
+- Assets/Scripts/CampaignManager.cs
+- Assets/Scripts/RewardManager.cs
+- Assets/Scripts/DayManager.cs
+- Assets/Scripts/OrderManager.cs
+- Assets/Scripts/ShopManager.cs
+
+
+3.10 Tutorial
+- On a fresh run, the tutorial walks the player through:
+  - opening the PC
+  - accepting an order
+  - picking up a part
+  - placing a part
+  - assembling a gun
+  - delivering a gun
+- Tutorial completion is saved.
+
+Important scripts:
+- Assets/Scripts/TutorialManager.cs
+- Assets/Scripts/PlayerInventory.cs
+- Assets/Scripts/PartSlot.cs
+- Assets/Scripts/CraftingManager.cs
+- Assets/Scripts/OrderManager.cs
+- Assets/Scripts/RewardManager.cs
+- Assets/Scripts/PCManager.cs
+
+
+3.11 Difficulty Presets
+- Difficulty changes:
+  - starting cash
+  - minimum payout
+  - payout multiplier
+  - campaign cash win goal
+  - inspection and raid thresholds
+  - inspection bribe cost
+  - max shutdowns
+  - jobs per day
+- Difficulty is saved and applied on the next restart.
+- Resource presets are provided in Assets/Resources/DifficultyPresets.
+
+Important scripts:
+- Assets/Scripts/DifficultyManager.cs
+- Assets/Scripts/DifficultyPreset.cs
+
+
+3.12 Saving and Persistence
+- The project uses JSON files instead of PlayerPrefs.
+- Save data is written under Application.persistentDataPath/GunDealer/.
+- Saved values include:
+  - cash
+  - completed orders
+  - heat
+  - day
+  - shutdown count
+  - game over state
+  - win state
+  - difficulty preset name
+  - tutorial completion
+
+Important scripts:
+- Assets/Scripts/SaveSystem.cs
+
+
+3.13 Forest Encounter and Combat
+- Accepting an order can spawn forest scouts.
+- NPC count depends on order risk.
+- The system also auto-builds:
+  - forest ground
+  - perimeter walls
+  - trees
+  - NPC spawn points
+  - a test range with targets
+- The assembled gun can fire projectiles.
+- Projectiles damage anything implementing IDamageable.
+
+Important scripts:
+- Assets/Scripts/ForestEncounterManager.cs
+- Assets/Scripts/ForestNpc.cs
+- Assets/Scripts/GunWeapon.cs
+- Assets/Scripts/GunProjectile.cs
+- Assets/Scripts/IDamageable.cs
+- Assets/Scripts/RangeTarget.cs
+
+
+3.14 Free Parts Per Day
+- Optional helper system.
+- Can spawn configured free parts at the start of each day.
+- Useful for balancing early progression or tutorial-friendly setups.
+
+Important scripts:
+- Assets/Scripts/DayStartPartSpawner.cs
+
+
+4. RUNTIME UI / UX SYSTEMS
+--------------------------
+The project builds major UI pieces at runtime.
+
+It includes:
+- Center crosshair
+- Interaction prompt
+- Toast notifications
+- Context hints
+- Persistent HUD
+- Summary popups
+- Runtime order board
+- Runtime shop catalog
+- Runtime PC navigation bar
+
+Important scripts:
+- Assets/Scripts/GameplayUIManager.cs
+- Assets/Scripts/GameFeedback.cs
+- Assets/Scripts/SummaryOverlayManager.cs
+- Assets/Scripts/RuntimeUiFactory.cs
+- Assets/Scripts/RuntimeGameBootstrap.cs
+- Assets/Scripts/BillboardToCamera.cs
+
+
+5. DATA ASSETS USED BY THE PROJECT
+----------------------------------
+Gun orders:
+- Script type: Assets/Scripts/GunOrder.cs
+- Folder currently used: Assets/Resources/Orders
+- Controls recipe, price, time limit, risk, heat effects, unlock day, notes, and optional slot requirements
+
+Shop items:
+- Script type: Assets/Scripts/ShopItem.cs
+- Folder currently used: Assets/Shop
+- Controls item name, cost, unlock day, prefab, and description
+
+Difficulty presets:
+- Script type: Assets/Scripts/DifficultyPreset.cs
+- Folder added: Assets/Resources/DifficultyPresets
+- Current preset assets:
+  - Easy
+  - Normal
+  - Hard
+
+
+6. SCRIPT MAP: WHAT EACH SCRIPT DOES
+------------------------------------
+
+Player / Interaction
+- Assets/Scripts/PlayerController.cs
+  First-person movement, look, jump, sprint, interact, drop, cancel, interaction targeting, and prompt updates.
+- Assets/Scripts/PlayerInventory.cs
+  Holds exactly one item, manages pickup/drop/release, and keeps held items from clipping badly into the world.
+- Assets/Scripts/IInteractable.cs
+  Base interaction interface used by world objects.
+- Assets/Scripts/Part.cs
+  Pickup behavior for physical weapon parts.
+- Assets/Scripts/PartSlot.cs
+  Bench slot logic for placing and removing parts.
+- Assets/Scripts/AssembleButtonInteract.cs
+  Interactable red bench button that triggers assembly.
+- Assets/Scripts/ComputerInteract.cs
+  Interactable computer trigger.
+- Assets/Scripts/ConveyorInteract.cs
+  Interactable conveyor trigger for shipping a loaded gun case.
+- Assets/Scripts/GunCase.cs
+  Gun case behavior: pickup, load assembled gun, transit state.
+
+Gameplay Managers
+- Assets/Scripts/OrderManager.cs
+  Generates orders, manages accept/reject/complete flow, order UI, recipe text, and blueprint display.
+- Assets/Scripts/CraftingManager.cs
+  Validates required slots, checks mismatches, assembles final guns, and tracks bench status.
+- Assets/Scripts/RewardManager.cs
+  Computes payouts, modifies cash, updates completed job count, and refreshes the HUD.
+- Assets/Scripts/TimerManager.cs
+  Tracks build timer and overtime.
+- Assets/Scripts/DayManager.cs
+  Runs daily job pacing, transitions, and day summaries.
+- Assets/Scripts/HeatManager.cs
+  Runs heat accumulation, inspections, raids, and related alerts.
+- Assets/Scripts/CampaignManager.cs
+  Tracks campaign shutdowns, loss state, win state, and restart flow.
+- Assets/Scripts/PCManager.cs
+  Controls the PC UI, tab switching, camera transitions, and input handling while in the computer.
+- Assets/Scripts/ShopManager.cs
+  Builds the runtime shop UI, orders physical stock to the shop, and completes purchases.
+- Assets/Scripts/DeliveryZone.cs
+  Legacy / utility delivery spawn zone script. Not the primary current shop flow, but still useful for spawn-slot style deliveries.
+- Assets/Scripts/DayStartPartSpawner.cs
+  Optional daily free-part spawner.
+- Assets/Scripts/TutorialManager.cs
+  Step-based onboarding flow for the full gameplay loop.
+- Assets/Scripts/DifficultyManager.cs
+  Finds and applies active difficulty presets.
+- Assets/Scripts/SaveSystem.cs
+  Generic JSON-based save/load layer for persistent state.
+
+Combat / Forest
+- Assets/Scripts/ForestEncounterManager.cs
+  Builds the forest/test-range environment and spawns forest NPCs on order acceptance.
+- Assets/Scripts/ForestNpc.cs
+  Simple enemy that chases the player, takes damage, and ragdolls on death.
+- Assets/Scripts/GunWeapon.cs
+  Fire logic for assembled guns, including rate of fire, spread, and projectile spawning.
+- Assets/Scripts/GunProjectile.cs
+  Projectile movement, hit detection, damage application, and impact force.
+- Assets/Scripts/IDamageable.cs
+  Interface for anything that can receive projectile damage.
+- Assets/Scripts/RangeTarget.cs
+  Reactive shooting target used by the testing range.
+
+Data Definitions
+- Assets/Scripts/GunOrder.cs
+  ScriptableObject definition for buyer jobs.
+- Assets/Scripts/ShopItem.cs
+  ScriptableObject definition for supplier items.
+- Assets/Scripts/DifficultyPreset.cs
+  ScriptableObject definition for difficulty tuning values.
+
+UI / Runtime Helpers
+- Assets/Scripts/GameplayUIManager.cs
+  Creates and controls the runtime overlay: HUD, prompt, crosshair, toasts, and hints.
+- Assets/Scripts/GameFeedback.cs
+  Simple helper to send gameplay messages to both the console and runtime toast UI.
+- Assets/Scripts/SummaryOverlayManager.cs
+  Creates and controls large summary popups for day transitions and campaign state.
+- Assets/Scripts/RuntimeUiFactory.cs
+  Helper methods for building runtime TMP/UI objects cleanly.
+- Assets/Scripts/RuntimeGameBootstrap.cs
+  Ensures required managers exist after scene load and standardizes overlay canvases.
+- Assets/Scripts/BillboardToCamera.cs
+  Keeps world-space UI facing the camera.
+
+Editor
+- Assets/Scripts/Editor/SceneSetupWizard.cs
+  Editor-only helper window that scaffolds common scene objects and manager objects.
+
+
+7. CURRENT EXPECTED GAMEPLAY FLOW
+---------------------------------
+1. Start the scene
+2. The bootstrap ensures core managers exist
+3. The tutorial may start if not completed before
+4. The day system begins day 1
+5. The order system offers a job
+6. The player uses the PC to accept the job
+7. The player gathers parts and assembles the gun
+8. The player cases the gun and ships it
+9. The reward, heat, campaign, and day systems all update
+10. New jobs continue until the day ends, the campaign is lost, or the cash goal is reached
+
+
+8. IMPORTANT CURRENT NOTES
+--------------------------
+- The current shop flow is "order to physical shop, then buy in world". It is not the old "spawn directly to delivery zone" flow.
+- Difficulty presets now exist in Resources and can be discovered without manual inspector wiring.
+- The campaign win state is treated as a closed campaign, like game over, for orders/shop/day flow.
+- Optional order parts are respected by the main order UI, crafting logic, and compact recipe displays.
+- Saving is file-based, not PlayerPrefs-based.
+
+
+9. RECOMMENDED UNITY VALIDATION AFTER CHANGES
+---------------------------------------------
+- Open the project in Unity and let scripts/assets reimport
+- Verify the new difficulty preset assets appear in the project
+- Enter Play Mode
+- Confirm:
+  - orders stop generating after win
+  - shop trading stops after win
+  - day progression stops after win
+  - forest ground/trees/range build correctly
+  - optional-part orders display correctly on the blueprint display
+  - Easy / Normal / Hard presets load correctly if selected
+

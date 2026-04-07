@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -13,8 +15,10 @@ public class DifficultyManager : MonoBehaviour
     [Header("Presets — drag Easy/Normal/Hard assets here")]
     public DifficultyPreset[] presets;
     public DifficultyPreset defaultPreset;
+    public string resourcePresetsPath = "DifficultyPresets";
 
     private DifficultyPreset activePreset;
+    DifficultyPreset[] cachedPresets;
 
     public static bool HasLiveInstance => instance != null || FindFirstObjectByType<DifficultyManager>() != null;
 
@@ -39,12 +43,15 @@ public class DifficultyManager : MonoBehaviour
         if (instance != null && instance != this) { Destroy(this); return; }
         instance = this;
 
-        // Pick preset by saved name, or use the default
-        string savedName = SaveSystem.Load(DifficultyKey, defaultPreset != null ? defaultPreset.name : "Normal");
-        activePreset = FindPresetByName(savedName) ?? defaultPreset;
+        RefreshPresetCache();
 
-        if (activePreset == null && presets != null && presets.Length > 0)
-            activePreset = presets[0];
+        // Pick preset by saved name, or use the default
+        string fallbackPresetName = defaultPreset != null ? defaultPreset.name : "Normal";
+        string savedName = SaveSystem.Load(DifficultyKey, fallbackPresetName);
+        activePreset = FindPresetByName(savedName) ?? defaultPreset ?? FindPresetByName("Normal");
+
+        if (activePreset == null && cachedPresets != null && cachedPresets.Length > 0)
+            activePreset = cachedPresets[0];
 
         if (activePreset == null)
         {
@@ -68,13 +75,53 @@ public class DifficultyManager : MonoBehaviour
         GameFeedback.Show($"Difficulty set to {presetName}. Restart the campaign for changes to take effect.");
     }
 
+    void RefreshPresetCache()
+    {
+        List<DifficultyPreset> mergedPresets = new List<DifficultyPreset>();
+        HashSet<DifficultyPreset> seenPresets = new HashSet<DifficultyPreset>();
+        AddPresets(presets, mergedPresets, seenPresets);
+
+        if (!string.IsNullOrWhiteSpace(resourcePresetsPath))
+        {
+            DifficultyPreset[] resourcePresets = Resources.LoadAll<DifficultyPreset>(resourcePresetsPath);
+            AddPresets(resourcePresets, mergedPresets, seenPresets);
+        }
+
+        cachedPresets = mergedPresets.ToArray();
+
+        if (defaultPreset == null)
+        {
+            defaultPreset = FindPresetByNameInternal("Normal", cachedPresets);
+        }
+    }
+
+    void AddPresets(DifficultyPreset[] sourcePresets, List<DifficultyPreset> destination, HashSet<DifficultyPreset> seenPresets)
+    {
+        if (sourcePresets == null) return;
+        for (int i = 0; i < sourcePresets.Length; i++)
+        {
+            DifficultyPreset preset = sourcePresets[i];
+            if (preset == null || seenPresets.Contains(preset)) continue;
+            seenPresets.Add(preset);
+            destination.Add(preset);
+        }
+    }
+
     DifficultyPreset FindPresetByName(string presetName)
     {
-        if (presets == null) return null;
-        for (int i = 0; i < presets.Length; i++)
+        if (string.IsNullOrWhiteSpace(presetName)) return null;
+        if (cachedPresets == null || cachedPresets.Length == 0) RefreshPresetCache();
+        return FindPresetByNameInternal(presetName, cachedPresets);
+    }
+
+    DifficultyPreset FindPresetByNameInternal(string presetName, DifficultyPreset[] searchSpace)
+    {
+        if (searchSpace == null) return null;
+        for (int i = 0; i < searchSpace.Length; i++)
         {
-            if (presets[i] != null && presets[i].name == presetName)
-                return presets[i];
+            DifficultyPreset preset = searchSpace[i];
+            if (preset != null && string.Equals(preset.name, presetName, StringComparison.OrdinalIgnoreCase))
+                return preset;
         }
         return null;
     }
